@@ -1,3 +1,7 @@
 {
-
+  "IPFSNode": {
+    "host": "ipfs.alexandria.io",
+    "port": 443,
+    "protocol": "https"
+  }
 }

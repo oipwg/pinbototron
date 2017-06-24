@@ -9,6 +9,7 @@
     "async": "^2.4.1",
     "config": "^1.26.1",
     "filesize-parser": "^1.4.1",
+    "ipfs-api": "^14.0.4",
     "log": "^1.4.0",
     "request": "^2.81.0",
     "sqlite": "^2.8.0"
