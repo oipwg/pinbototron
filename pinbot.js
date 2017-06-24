@@ -5,16 +5,22 @@ let fsp = require('filesize-parser');
 let request = require('request');
 let db = require('sqlite');
 
-let tools = require('./tools');
+function getConfig(key, defaultVal) {
+    if (config.has(key)) {
+        return config.get(key);
+    }
+    log.warning("Config key %s not found using default $s", key, defaultVal);
+    return defaultVal;
+}
 
 
-let log = new Log(tools.getConfig('logging.level', 'debug'),
-    fs.createWriteStream(tools.getConfig('logging.path', './pinbot.log'), {flags: 'a'}));
+let log = new Log(getConfig('logging.level', 'debug'),
+    fs.createWriteStream(getConfig('logging.path', './pinbot.log'), {flags: 'a'}));
 
-let diskUsageLimit = fsp(tools.getConfig("resourceLimits.disk", "10GB"));
+let diskUsageLimit = fsp(getConfig("resourceLimits.disk", "10GB"));
 
 
-let libraryMediaURL = tools.getConfig('libraryD.url', 'https://api.alexandria.io/alexandria/v2/media/get/all');
+let libraryMediaURL = getConfig('libraryD.url', 'https://api.alexandria.io/alexandria/v2/media/get/all');
 function refreshPublishedMedia() {
     log.info('Fetching media items');
     request(libraryMediaURL, function (err, resp, body) {
@@ -129,19 +135,14 @@ function validMultihash(string) {
 
 
 function main_hehe() {
-    log.notice('Starting pinbot');
-
-    log.debug("Pinbot setup complete.");
-
     refreshPublishedMedia();
 }
 
 
 // Don't judge, I'm learning Promises as I go here and this will 100% be getting redone
 Promise.resolve()
-    .then(() => tools.setLogger(log))
-    .then(() => db.open(tools.getConfig("database.db", ":memory:"), {Promise}))
-    .then(() => tools.initializeDB(db))
+    .then(() => db.open(getConfig("database.db", ":memory:"), {Promise}))
+    .then(() => db.migrate({force: 'last'}))
     .then(() => db.prepare("INSERT OR IGNORE INTO main.pinTracker (fileID, ipfsAddress) VALUES (?, ?);")
         .then((stmt) => stmtAddFileToDB = stmt))
     .then(() => main_hehe())
