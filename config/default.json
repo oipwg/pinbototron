@@ -1,0 +1,25 @@
+{
+  "stopPinLimit": 10,
+  "minPinThreshold": 10,
+  "recentPinCount": 10,
+  "resourceLimits": {
+    "disk": "10GB"
+  },
+  "logging": {
+    "level": "debug",
+    "path": "./pinbot.log"
+  },
+  "IPFSNode": {
+    "host": "localhost",
+    "port": 3001
+  },
+  "pinbots": [
+    ""
+  ],
+  "database": {
+    "db": "./db/pinbot.sq3"
+  },
+  "libraryD": {
+    "url": "https://api.alexandria.io/alexandria/v2/media/get/all"
+  }
+}
