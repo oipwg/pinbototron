@@ -150,8 +150,7 @@ function refreshPinCounts(ipfsId) {
     let pinCountProducer = function () {
         if (i < results.length - 1 && results.length !== 0) {
             i++;
-            console.log("%d Started.", i);
-            return updatePinCount(ipfsId, results[i], i);
+            return updatePinCount(ipfsId, results[i]);
         } else
             return null;
     };
@@ -166,9 +165,7 @@ function refreshPinCounts(ipfsId) {
         })
 }
 
-function updatePinCount(ipfsId, row, i) {
-    log.debug("%s - starting", row.fileAddress);
-
+function updatePinCount(ipfsId, row) {
     return ipfs.dht.findprovs(row.fileAddress)
         .then(function (peerInfos) {
             let count = 0;
@@ -185,7 +182,6 @@ function updatePinCount(ipfsId, row, i) {
 
             log.info("%s - isPinned[%s] pinCount[%d]", row.fileAddress, isPinned ? 'True ' : 'False', count);
 
-            console.log("%d Done.", i);
             return db.run("UPDATE pinTracker SET pinCount = $pinCount, lastCheck = $lastCheck, isPinned = $isPinned WHERE fileAddress = $fileAddress", {
                 $fileAddress: row.fileAddress,
                 $pinCount: count,
@@ -206,8 +202,7 @@ function updateFileSizes() {
     let fileSizeProducer = function () {
         if (i < results.length - 1 && results.length !== 0) {
             i++;
-            console.log("%d Started.", i);
-            return updateFileSize(results[i], i);
+            return updateFileSize(results[i]);
         } else
             return null;
     };
@@ -265,7 +260,6 @@ function pinMedia() {
             i++;
             if (diskUse + results[i].bytes < diskUsageLimit) {
                 diskUse += results[i].bytes;
-                console.log("%d Started", i);
                 return pinArtifact(results[i]);
             }
         } else
@@ -292,11 +286,10 @@ function pinMedia() {
         })
 }
 
-function pinArtifact(row, i) {
+function pinArtifact(row) {
     log.info("Pinning %s for %d bytes", row.fileAddress, row.bytes);
     return ipfs.pin.add(row.fileAddress).then(res => {
         log.info('%s pinned %d bytes', row.fileAddress, row.bytes);
-        console.log("%d Done.", i);
         return db.run("UPDATE pinTracker SET pinCount = pinCount + 1, isPinned = $isPinned WHERE fileAddress = $fileAddress", {
             $fileAddress: row.fileAddress,
             $isPinned: 1
