@@ -218,7 +218,7 @@ function updateFileSizes() {
         })
 }
 
-function updateFileSize(row, i) {
+function updateFileSize(row) {
     return ipfs.object.get(row.ipfsAddress)
         .then(function (res) {
             if (res._links.length === 0) {
@@ -239,7 +239,6 @@ function updateFileSize(row, i) {
                     log.debug("%s [%d bytes]", row.ipfsAddress + '/' + link._name, link._size);
                 }
             }
-            console.log("%d Done.", i);
         })
         .catch(function (err) {
             log.error("Failed to load IPFS Item [%s]", row.ipfsAddress);
