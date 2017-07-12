@@ -144,7 +144,8 @@ function getMyIpfsId() {
 
 function refreshPinCounts(ipfsId) {
     let d = new Date;
-    let ts = d.setHours(d.getHours() - 1).getTime();
+    d.setHours(d.getHours() - 1);
+    let ts = d.getTime();
     let results;
     let i = -1;
 
