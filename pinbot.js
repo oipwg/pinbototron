@@ -143,7 +143,8 @@ function getMyIpfsId() {
 }
 
 function refreshPinCounts(ipfsId) {
-    let ts = Date.now(); // (pinCount = 0 OR pinCount IS NULL) AND
+    let d = Date.now();
+    let ts = d.setHours(d.getHours() - 1);
     let results;
     let i = -1;
 
