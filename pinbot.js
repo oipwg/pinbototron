@@ -1,10 +1,13 @@
-let config = require('config');
-let db = require('sqlite');
-let Log = require('log');
-let fs = require('fs');
-let fsp = require('filesize-parser');
-var ipfsAPI = require('ipfs-api');
-let request = require('request');
+const config = require('config');
+const db = require('sqlite');
+const Log = require('log');
+const fs = require('fs');
+const fsp = require('filesize-parser');
+const ipfsAPI = require('ipfs-api');
+const cleanMultihash = require('ipfs-api/src/clean-multihash');
+const mh = require('multihashes');
+const request = require('request');
+const PromisePool = require('es6-promise-pool');
 
 function getConfig(key, defaultVal) {
     if (config.has(key)) {
@@ -16,17 +19,18 @@ function getConfig(key, defaultVal) {
 
 function refreshPublishedMedia() {
     log.info('Fetching media items');
-    request(libraryMediaURL, function (err, resp, body) {
-        if (!err && resp.statusCode === 200) {
-            let media = JSON.parse(body);
-            log.debug("Library refresh found %d media items", media.length);
-            for (let k in media) {
-                if (media.hasOwnProperty(k)) {
-                    processMediaFiles(media[k]);
+    return new Promise((resolve, reject) => {
+        request(libraryMediaURL, function (err, resp, body) {
+            if (!err && resp.statusCode === 200) {
+                let media = JSON.parse(body);
+                log.debug("Library refresh found %d media items", media.length);
+                for (let m of media) {
+                    processMediaFiles(m);
                 }
-            }
-            console.log("meh")
-        }
+                resolve();
+            } else
+                reject();
+        });
     });
 }
 
@@ -107,10 +111,9 @@ function processOip041(oip) {
         return
     }
 
-    for (let k in files)
-        if (files.hasOwnProperty(k))
-            if (files[k].fname)
-                addFileToDB(dhtHash + '/' + files[k].fname, dhtHash)
+    for (let f of files)
+        if (f.fname)
+            addFileToDB(dhtHash + '/' + f.fname, dhtHash)
 }
 
 let stmtAddFileToDB;
@@ -125,58 +128,190 @@ function validMultihash(string) {
         }
     }
     return false;
+    //
+    // try {
+    //     multihash = cleanMultihash(multihash, options)
+    // } catch (err) {
+    //     return callback(err)
+    // }
 }
 
-function refreshPinCounts() {
+function getMyIpfsId() {
+    return new Promise((resolve, reject) => {
+        ipfs.id().then(res => resolve(res.id)).catch(err => reject(err));
+    })
+}
 
+function refreshPinCounts(ipfsId) {
+    let ts = Date.now(); // (pinCount = 0 OR pinCount IS NULL) AND
+    let results;
+    let i = -1;
+
+    let pinCountProducer = function () {
+        if (i < results.length - 1 && results.length !== 0) {
+            i++;
+            console.log("%d Started.", i);
+            return updatePinCount(ipfsId, results[i], i);
+        } else
+            return null;
+    };
+
+
+    return db.all('SELECT * FROM pinTracker WHERE fileAddress IS NOT NULL AND (lastCheck < $ts OR lastCheck IS NULL);', {$ts: ts})
+        .then(function (rows) {
+            log.info("Updating pin counts for %d items.", rows.length);
+            results = rows;
+            let pool = new PromisePool(pinCountProducer, concurrency);
+            return pool.start();
+        })
+}
+
+function updatePinCount(ipfsId, row, i) {
+    log.debug("%s - starting", row.fileAddress);
+
+    return ipfs.dht.findprovs(row.fileAddress)
+        .then(function (peerInfos) {
+            let count = 0;
+            let isPinned = false;
+
+            for (let peer of peerInfos) {
+                if (peer.Type === 4) {
+                    count++;
+                    for (let response of peer.Responses)
+                        if (response.ID === ipfsId)
+                            isPinned = true;
+                }
+            }
+
+            log.info("%s - isPinned[%s] pinCount[%d]", row.fileAddress, isPinned ? 'True ' : 'False', count);
+
+            console.log("%d Done.", i);
+            return db.run("UPDATE pinTracker SET pinCount = $pinCount, lastCheck = $lastCheck, isPinned = $isPinned WHERE fileAddress = $fileAddress", {
+                $fileAddress: row.fileAddress,
+                $pinCount: count,
+                $isPinned: isPinned,
+                $lastCheck: Date.now()
+            });
+        })
+        .catch(function (err) {
+            log.error("Failed to load IPFS Item [%s]", row.fileAddress);
+            console.log(err)
+        });
 }
 
 function updateFileSizes() {
-    db.all('SELECT * FROM pinTracker WHERE bytes IS NULL;', {Promise})
+    let results;
+    let i = -1;
+
+    let fileSizeProducer = function () {
+        if (i < results.length - 1 && results.length !== 0) {
+            i++;
+            console.log("%d Started.", i);
+            return updateFileSize(results[i], i);
+        } else
+            return null;
+    };
+
+
+    return db.all('SELECT * FROM pinTracker WHERE bytes IS NULL;')
         .then(function (rows) {
             log.info("Updating file sizes for %d items.", rows.length);
-            let i = 1;
-            for (let row of rows) {
-                setTimeout(function() {
-                    updateFileSize(row);
-                },i++*500);
+            results = rows;
+            let pool = new PromisePool(fileSizeProducer, concurrency);
+            return pool.start();
+        })
+}
+
+function updateFileSize(row, i) {
+    return ipfs.object.get(row.ipfsAddress)
+        .then(function (res) {
+            if (res._links.length === 0) {
+                db.run("UPDATE pinTracker SET bytes = $bytes, fileAddress = $fileAddress WHERE ipfsAddress = $ipfsAddress", {
+                    $ipfsAddress: row.ipfsAddress,
+                    $fileAddress: row.ipfsAddress,
+                    $bytes: res._data.length
+                });
+                log.debug("%s [%d bytes]", row.ipfsAddress, res._data.length);
+            } else {
+                for (let link of res._links) {
+                    if (row.ipfsAddress + '/' + link._name === row.fileID)
+                        db.run("UPDATE pinTracker SET bytes = $bytes, fileAddress = $fileAddress WHERE fileID = $fileID", {
+                            $fileID: row.ipfsAddress + '/' + link._name,
+                            $fileAddress: mh.toB58String(link._multihash),
+                            $bytes: link._size
+                        });
+                    log.debug("%s [%d bytes]", row.ipfsAddress + '/' + link._name, link._size);
+                }
             }
+            console.log("%d Done.", i);
         })
         .catch(function (err) {
+            log.error("Failed to load IPFS Item [%s]", row.ipfsAddress);
             console.log(err);
+            db.run("UPDATE pinTracker SET bytes = $bytes WHERE ipfsAddress = $ipfsAddress", {
+                $ipfsAddress: row.ipfsAddress,
+                $bytes: -1
+            });
+        });
+}
+
+function pinMedia() {
+    let diskUse = 0;
+    let results;
+    let i = -1;
+
+    function pinProducer() {
+        if (i < results.length - 1 && results.length !== 0) {
+            i++;
+            if (diskUse + results[i].bytes < diskUsageLimit) {
+                diskUse += results[i].bytes;
+                console.log("%d Started", i);
+                return pinArtifact(results[i]);
+            }
+        } else
+            return null;
+    }
+
+
+    return db.all('SELECT * FROM pinTracker WHERE isPinned = 1;')
+        .then(function (rows) {
+            log.info("%d media pieces are pinned.", rows.length);
+            for (let row of rows) {
+                diskUse += row.bytes;
+            }
+            log.info("Disk utilization %d bytes", diskUse);
+        })
+        .then(() =>
+            db.all('SELECT * FROM pinTracker WHERE pinCount < $minPinThreshold AND bytes > 0 AND isPinned == 0 ORDER BY pinCount ASC, id ASC;',
+                {$minPinThreshold: minPinThreshold}))
+        .then(function (rows) {
+            log.info("Possibly pinning %d media pieces.", rows.length);
+            results = rows;
+            let pool = new PromisePool(pinProducer, concurrency);
+            return pool.start();
         })
 }
 
-function updateFileSize(row) {
-    if (row.fileID !== row.ipfsAddress)
-        ipfs.ls(row.ipfsAddress)
-            .then(function (res) {
-                for (let obj of res.Objects)
-                    for (let link of obj.Links) {
-                        if (obj.Hash + '/' + link.Name === row.fileID)
-                            db.run("UPDATE pinTracker SET bytes = $bytes, fileAddress = $fileAddress WHERE fileID = $fileID", {
-                                $fileID: obj.Hash + '/' + link.Name,
-                                $fileAddress: link.Hash,
-                                $bytes: link.Size
-                            });
-                        log.debug(obj.Hash + '/' + link.Name, link.Size)
-                    }
-            })
-            .catch(function (err) {
-                console.log(err)
-            });
+function pinArtifact(row, i) {
+    log.info("Pinning %s for %d bytes", row.fileAddress, row.bytes);
+    return ipfs.pin.add(row.fileAddress).then(res => {
+        log.info('%s pinned %d bytes', row.fileAddress, row.bytes);
+        console.log("%d Done.", i);
+        return db.run("UPDATE pinTracker SET pinCount = pinCount + 1, isPinned = $isPinned WHERE fileAddress = $fileAddress", {
+            $fileAddress: row.fileAddress,
+            $isPinned: 1
+        });
+    }).catch(err => {
+        log.error('Failed to pin [%s]', row.fileAddress);
+    })
 }
-
-function main_hehe() {
-    refreshPublishedMedia();
-    setTimeout(updateFileSizes, 1.5 * 1000);
-    setTimeout(refreshPinCounts, 1.5 * 1000);
-}
-
 
 let log = new Log(getConfig('logging.level', 'debug'),
     fs.createWriteStream(getConfig('logging.path', './pinbot.log'), {flags: 'a'}));
+let concurrency = getConfig('concurrency', 5);
 let diskUsageLimit = fsp(getConfig("resourceLimits.disk", "10GB"));
+let minPinThreshold = getConfig('minPinThreshold', 1);
+let stopPinLimit = getConfig('stopPinLimit', 10);
 let libraryMediaURL = getConfig('libraryD.url', 'https://api.alexandria.io/alexandria/v2/media/get/all');
 let ipfs = ipfsAPI(getConfig('IPFSNode', {host: 'localhost', port: '5001', protocol: 'http'}));
 
@@ -185,17 +320,14 @@ let ipfs = ipfsAPI(getConfig('IPFSNode', {host: 'localhost', port: '5001', proto
 Promise.resolve()
     .then(() => db.open(getConfig("database.db", ":memory:"), {Promise}))
     .then(() => db.migrate())
-    .then(() => db.prepare("INSERT OR IGNORE INTO main.pinTracker (fileID, ipfsAddress) VALUES (?, ?);")
-        .then((stmt) => stmtAddFileToDB = stmt))
-    .then(() => main_hehe())
-    .catch(err => console.error(err.stack));
-
-
-// ipfs.ls('QmWS344nttYkMJo1ooHejcuEEdZauu4T1mfJmpatssmXP9')
-//     .then(function (res) {
-//         console.log('my res is: ');
-//         console.log(res);
-//     })
-//     .catch(function (err) {
-//         console.log('Fail: ', err)
-//     });
+    .then(() => db.prepare("INSERT OR IGNORE INTO main.pinTracker (fileID, ipfsAddress) VALUES (?, ?);"))
+    .then(stmt => stmtAddFileToDB = stmt)
+    .then(refreshPublishedMedia)
+    .then(updateFileSizes)
+    .then(getMyIpfsId)
+    .then(id => refreshPinCounts(id))
+    .then(pinMedia)
+    .catch(err => {
+        console.log(err);
+        console.error(err.stack)
+    });

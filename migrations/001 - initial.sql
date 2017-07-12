@@ -2,8 +2,9 @@
 --  Up
 ---------------------------------------------------------
 CREATE TABLE pinTracker (
-  id          INT PRIMARY KEY,
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
   fileID      TEXT NOT NULL UNIQUE,
+  fileAddress TEXT,
   ipfsAddress TEXT NOT NULL,
   pinCount    INT,
   lastCheck   INT,

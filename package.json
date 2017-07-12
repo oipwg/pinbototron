@@ -6,11 +6,12 @@
     "start": "node ./pinbot.js"
   },
   "dependencies": {
-    "async": "^2.4.1",
     "config": "^1.26.1",
+    "es6-promise-pool": "^2.4.6",
     "filesize-parser": "^1.4.1",
     "ipfs-api": "^14.0.4",
     "log": "^1.4.0",
+    "multihashes": "^0.4.5",
     "request": "^2.81.0",
     "sqlite": "^2.8.0"
   }

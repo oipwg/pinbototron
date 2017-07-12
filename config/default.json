@@ -1,6 +1,7 @@
 {
+  "concurrency": 10,
   "stopPinLimit": 10,
-  "minPinThreshold": 10,
+  "minPinThreshold": 5,
   "recentPinCount": 10,
   "resourceLimits": {
     "disk": "10GB"
@@ -18,6 +19,7 @@
     ""
   ],
   "database": {
+    "type": "sqlite",
     "db": "./db/pinbot.sq3"
   },
   "libraryD": {

@@ -2,5 +2,5 @@ node_modules/
 .idea/
 Pinbot.iml
 
-db/pinbot.sq3
+db/*.sq3
 pinbot.log
