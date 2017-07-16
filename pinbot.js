@@ -72,7 +72,9 @@ function processAlexandriaMedia(am) {
             } else {
                 // pin each field as a filename relative to the DHT hash
                 if (validMultihash(dhtHash)) {
-
+                    if (filename) {
+                      addFileToDB(dhtHash + "/" + filename, dhtHash);
+                    }
                     if (posterFrame) {
                         addFileToDB(dhtHash + "/" + posterFrame, dhtHash);
                     }
