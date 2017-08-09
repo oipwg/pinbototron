@@ -4,7 +4,7 @@ const Log = require('log')
 const fs = require('fs')
 const fsp = require('filesize-parser')
 const ipfsAPI = require('ipfs-api')
-const cleanMultihash = require('ipfs-api/src/clean-multihash')
+// const cleanMultihash = require('ipfs-api/src/clean-multihash')
 const mh = require('multihashes')
 const request = require('request')
 const PromisePool = require('es6-promise-pool')
@@ -126,19 +126,19 @@ function addFileToDB (filePath, dhtHash) {
 }
 
 function validMultihash (string) {
-  // if (string) {
-  //   if (string[0] === 'Q' && string[1] === 'm') {
-  //     return true
-  //   }
-  // }
-  // return false
-
-  try {
-    cleanMultihash(string)
-    return true
-  } catch (err) {
-    return false
+  if (string) {
+    if (string[0] === 'Q' && string[1] === 'm') {
+      return true
+    }
   }
+  return false
+
+  // try {
+  //   cleanMultihash(string)
+  //   return true
+  // } catch (err) {
+  //   return false
+  // }
 }
 
 function getMyIpfsId () {
