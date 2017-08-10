@@ -1,0 +1,9 @@
+{
+  "minPinThreshold": 5,
+  "resourceLimits": {
+    "disk": "20GB"
+  },
+  "logging": {
+    "path": "./log/pinbot.log"
+  }
+}

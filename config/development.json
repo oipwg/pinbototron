@@ -1,10 +1,5 @@
 {
-  "IPFSNode": {
-    "host": "ipfs.alexandria.io",
-    "port": 443,
-    "protocol": "https"
-  },
   "resourceLimits": {
-    "disk": "3GB"
+    "disk": "5GB"
   }
 }
