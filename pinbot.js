@@ -8,6 +8,7 @@ const ipfsAPI = require('ipfs-api')
 const mh = require('multihashes')
 const request = require('request')
 const PromisePool = require('es6-promise-pool')
+const pt = require('promise-timeout');
 
 function getConfig (key, defaultVal) {
   if (config.has(key)) {
@@ -157,7 +158,14 @@ function refreshPinCounts (ipfsId) {
   let pinCountProducer = function () {
     if (i < results.length - 1 && results.length !== 0) {
       i++
-      return updatePinCount(ipfsId, results[i])
+      return pt.timeout(updatePinCount(ipfsId, results[i]), getConfig('timeout.pinCount', 60) * 1000)
+        .then(function (pr) {
+          return pr
+        }).catch(function (err) {
+          if (err instanceof pt.TimeoutError) {
+            log.error('Timeout getting pinCount: ' + results[i].ipfsAddress);
+          }
+        });
     } else
       return null
   }
@@ -196,7 +204,7 @@ function updatePinCount (ipfsId, row) {
       })
     })
     .catch(function (err) {
-      log.error('Failed to load IPFS Item [%s]', row.fileAddress)
+      log.error('Failed to load pin count [%s]', row.fileAddress)
       console.log(err)
     })
 }
@@ -208,7 +216,14 @@ function updateFileSizes () {
   let fileSizeProducer = function () {
     if (i < results.length - 1 && results.length !== 0) {
       i++
-      return updateFileSize(results[i])
+      return pt.timeout(updateFileSize(results[i]), getConfig('timeout.fileSize', 60) * 1000)
+        .then(function (pr) {
+          return pr
+        }).catch(function (err) {
+          if (err instanceof pt.TimeoutError) {
+            log.error('Timeout getting fileSize: ' + results[i].ipfsAddress);
+          }
+        });
     } else
       return null
   }
@@ -222,16 +237,9 @@ function updateFileSizes () {
     })
 }
 
-const skipHashes = ['Qmeke1CyonqgKErvGhE18WLBuhrLaScbpSAS6vGLuoSCXM', 'Qmeke1CyonqgKErvGhE18WLBuhrLaScbpSAS6vGLuoSCXM', 'Qmeke1CyonqgKErvGhE18WLBuhrLaScbpSAS6vGLuoSCXM', 'QmcCsR75CkFKeeP8U8TzZ1YszgxHtcubmwFxCx2CxSFQty', 'QmTrYQieyjPA31Ht78nZRYN8J7KHW4fTf1rgH6biRVDNBH', 'QmTrYQieyjPA31Ht78nZRYN8J7KHW4fTf1rgH6biRVDNBH', 'QmTfyzeNwSrpWfjocmQrqWNmQXLhXECgBhkbbcMLzEYw1G', 'QmTfyzeNwSrpWfjocmQrqWNmQXLhXECgBhkbbcMLzEYw1G', 'QmY7U9eBMEGQh6SahbQx1E7g91fCVukZL8bi2BJjYXpqiw', 'QmY7U9eBMEGQh6SahbQx1E7g91fCVukZL8bi2BJjYXpqiw', 'QmdJekV4KTf4c4McLTeMSfjHatQWpF2UdXPJgbiZxiGhr5', 'QmdJekV4KTf4c4McLTeMSfjHatQWpF2UdXPJgbiZxiGhr5', 'QmVxh4Qj8otoYJScmhBEKirysQuh5wPFsn7FiYmDhVUru6', 'QmVxh4Qj8otoYJScmhBEKirysQuh5wPFsn7FiYmDhVUru6', 'Qmd9jLxKitTM89c7vwfiiAsN6f6oSbc8fX8e5T8pdtcuMo', 'QmNr7wdyEHTEFrFgCBsDTKPMwj4PHKAYbjMz5Md5hvQPeq', 'QmVDxpAKuHMBfUTxGj8ZfKuC3bc4Bs4raGREQZGD7nqcVe', 'QmZ1KP7KJf2oTMcgtxx9giGL8R2v3StrcAv5im24Gnw6kf', 'QmYwYSRUxrBMnS9Pnk6HanDUudEDgA47GTctqSirZ3Xdxn', 'QmW3WSN2Y8hASFmF4eecn6hrLNrdAid7CyAiGUY8yCP8Ny', 'QmaPhDebderaugizZjgb7cuz5tVNhEMczdqzDpQcFeK5Bj', 'QmQBkuG7T5boGYrzJkTYTc4foaMNtgQaurzTGNQPx98WkU', 'QmQBkuG7T5boGYrzJkTYTc4foaMNtgQaurzTGNQPx98WkU', 'QmNPXCHop47uRek7Ug2pqPhmpXVtsqNNPawor8rYNoEGah', 'QmPZUckSCUhppmebsSKG5aj1RC1vNz5PWeaijsawFYGxFj', 'QmR6gc6uUCnKX336JCiyZre8wooBHUrEkyyAN1tT8f9nGq', 'QmUYY6nLo7bKEjPPh82U6oHrsXUpF1uenZtzgpUUYdTkLf', 'QmPbAHcDZB7HqPpzYy8ZyPpP73F8DLDkpMuHow8dvShg8s', 'QmPbAHcDZB7HqPpzYy8ZyPpP73F8DLDkpMuHow8dvShg8s', 'QmSfKUYxmbytBZFK2vzqPN5xbxYUZtro5Q9HEg8gqMQVME', 'QmSJmpieSp3NZJ36ogWhUsqxbiYbxrCZy79vY3KSwz4XfS', 'QmRHcphM97HvPk8o85GoodHs3BQHyrGcTmgQHVreibHwu2', 'QmccLiRW7ajqctW3euZZFxaYnFWb9ntkiTikJbjaRamWBM', 'QmaofgCXLaFnHugZVqwZRvCQL5EbMDrh9qQhyB2rfQ5cke', 'QmUj8qLY8aGhagDAZzsdNhoKVJqsmhhhh8oTPJVeoFtEBF', 'QmdZGrLjW8XNS4duh5ZcZpmQL2jCi3VzXkrKf5qxMpqtu6', 'QmQAzdyR7KrZynC8SH4hDVZHiikCPXrsfS7vSaFwGG52Gu', 'QmQPptJRz41M6KkjjT1x6VNdnieFBZe29388ZpswnHoqHc', 'QmVAbF3jNAMATcvAv681GhMdxCQLdJVLw9fi94V4BG2uV5', 'QmXDL3Q8eoNgJpJSaotRxaJ225ywmqrgAsUTQUtAZdcErG', 'QmRyPmJTpRqdAp4DKsuN7qgG2bHevhhe2pj3RbieXpLhPq', 'QmNTUCJ1Dcp1z5ptgDEz1MTjVCd5xCoayK6P28WRGYj7WU', 'QmR1tQmq1EyVijrTQ7k3eYnQx8Fkjyko2WZCREZcnSniDP', 'Qma3Bk3z2kjHXx849BVFGzVZFgMFDnRgFmvgw67xHcoDzy', 'QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH', 'QmWXAw6Jc7orbUHLHF1TdbtK1g87BVEYd1ePgsoRyxFYcA', 'QmSCCwuytSwYe7CquSuq1NzcPLXZutZkGV4yRSQxpb5zYh', 'QmQaetCsudRh7i5yzeAtb73qMQKsDR73o5F67bx8jS7YPz', 'QmQaetCsudRh7i5yzeAtb73qMQKsDR73o5F67bx8jS7YPz', 'QmX7FevmtyT2DVVsUGpCSFxazCFU7MCxEvdU5uWQm98PYA', 'QmX7FevmtyT2DVVsUGpCSFxazCFU7MCxEvdU5uWQm98PYA', 'QmdYGrXAQFSR79HuR4BBLVVeCimaL3E5SBTc9SUW7z31vy', 'QmWHCVxW7km2rBSPixA92TdwQgXze8Z8LHSdJqh1SaYjnF', 'QmV5CxbSXNfBdU2Uw6pCLUEarDJM6foy5dp16nTh845zmC', 'QmSuBSefFtqrEiqpKDbicA3nSGAVXSQhYAsjed5mGwwogh', 'QmZQHXEF1HcbqQmjZzgH4itxXhyZZYSvgRZs3tGp1iBCfc', 'QmSH5DF6W8rWqV7wxDkiWr2uwtZF97cuhveA17HTXEMVjg', 'QmUJU7ZKekkms6CPiJTGaQuRDG5pSCsoPFCSG3opeDuRy5', 'QmUdp18RCZkMs7UrnacQW8PN2QDFyDjd3YHktSzBMiRrZL', 'QmTWVdvb42HC88wQ3M7XcqSGc5ippSc95zGrsJMdzTbwp2', 'QmYo7b1ANuBRs72WkYKUf8xGXEg4Sde61Dkm8Af7wJD5Kz', 'QmToimRMjnLvgbRUbsjBQUf9qdQdk6S2yxobVDN5bvGXtk', 'QmRYr2XoLeutFkCeykNEDg5ziyPLDMLuZufAH33Qoqu5r3', 'QmQJYTCKz4JkNWWViH3XqD8RD49a6jzuexKDGvVaeQTMf3', 'QmX7dHH7ymnVTU7G2VrTdi1SZMRrCqibR671mzv7fim29W', 'QmRPHTTV6Xs6VJV9xNBqHCd1Qiv8Us6iA9ZLiZzbjhkKME', 'QmfTxECGdDoDqHQXUyTQWumvPaAWTQJKtaNojJc4CM3zKi', 'QmX3mPcEg59L8VoTKqqAmKz369N76CAT98je11o8b3MqLX', 'QmX3mPcEg59L8VoTKqqAmKz369N76CAT98je11o8b3MqLX', 'QmdiY6sWsC1mKhnkRfemZnUonFmyE8KhPemob4owvmaqst', 'QmdiY6sWsC1mKhnkRfemZnUonFmyE8KhPemob4owvmaqst', 'QmeP7Ta3Rjp6jCAwrsXpA6mLCC5HfMkqzDRk2dBa35rfVv', 'QmeP7Ta3Rjp6jCAwrsXpA6mLCC5HfMkqzDRk2dBa35rfVv', 'QmU6heh6AihE2vMzco1htiyB4CU6i7Jb6eQNYgirPsehNv', 'QmU6heh6AihE2vMzco1htiyB4CU6i7Jb6eQNYgirPsehNv', 'QmV4jg2VjQwvUkazrdbazBBndB9BBaDa4rR3iE28T58eAn', 'QmV4jg2VjQwvUkazrdbazBBndB9BBaDa4rR3iE28T58eAn',
-  'QmQkWhNPzb7nhdTJZCiDPFNSTiEDg34EKc3sE7c2dA7J7x', 'QmYW1M8nyZbJDBRdBRGE9Mnks8raof2MK8zjPq7tM2eo36', 'Qme2DQu9uiiDqKZBMzaEE91JKG4Dd1Hd7QCuhTJcZJ3mAs', 'Qmd6jZFH7oQddBiWoQt1tgqU9GjUNJLi8hNcVgSApfqxwt', 'QmRA3NWM82ZGynMbYzAgYTSXCVM14Wx1RZ8fKP42G6gjgj', 'QmbjP9Q7SGFLjzgfYYWKpaafyefn8C9Rm5hYEPnJJr3BVU', 'QmbjP9Q7SGFLjzgfYYWKpaafyefn8C9Rm5hYEPnJJr3BVU', 'QmY4KXsCA1DEix74emacdCDR8TQHd7wieFLR47RQMqWpec', 'QmbZ2VPeBDXkVScdF1u8Hb8duxFrYLPqQgMQoydp3Hk5G1', 'QmbZ2VPeBDXkVScdF1u8Hb8duxFrYLPqQgMQoydp3Hk5G1', 'QmXibd3yTUwryQ6syd5fpUhM9nXRdn19TZdKQKyPrYQn9F', 'QmU8gm3Ffpt9jcpLEg4sGV7E18TR22Hjg2c5ztsebpDXTy', 'QmWhRkj4r2evQpr8QVyLefpRDTJVU8mbGqGwFbqC3gbnhG', 'QmQAiBJsYmsPbnnDKNVdTebWQHnkK9ieyrRhNds6Dudy3K', 'QmQnGKBwNSVRgS3DKKH5ifHFMvSZWunf5ACN4dVdZ66PnP', 'QmZorHqGwwVU9UCrwP82dzDyvTTBLpu94BmXpHfRGCKs2S', 'QmZorHqGwwVU9UCrwP82dzDyvTTBLpu94BmXpHfRGCKs2S', 'Qmcqtw8FfrVSBaRmbWwHxt3AuySBhJLcvmFYi3Lbc4xnwj', 'Qmcqtw8FfrVSBaRmbWwHxt3AuySBhJLcvmFYi3Lbc4xnwj', 'Qmcqtw8FfrVSBaRmbWwHxt3AuySBhJLcvmFYi3Lbc4xnwj', 'QmWKYk6Npr55RpaDsd6TqrWz5mdg8PX5i8wecMBu2kvgPB', 'QmU8gm3Ffpt9jcpLEg4sGV7E18TR22Hjg2c5ztsebpDXTy', 'QmU8gm3Ffpt9jcpLEg4sGV7E18TR22Hjg2c5ztsebpDXTy', 'QmQkWhNPzb7nhdTJZCiDPFNSTiEDg34EKc3sE7c2dA7J7x']
-
 function updateFileSize (row) {
   log.debug('%s [%d bytes]', row.ipfsAddress, -1)
-  if (skipHashes.includes(row.ipfsAddress)) {
-    log.alert('Skipping %s, it\'s dead.', row.ipfsAddress)
-    return Promise.resolve()
-  }
-  return ipfs.object.get(row.ipfsAddress, {timeout: '60s'})
+  return ipfs.object.get(row.ipfsAddress)
     .then(function (res) {
       if (res._data[1] === 2) { // is file
         return ipfs.object.stat(row.ipfsAddress)
@@ -244,7 +252,7 @@ function updateFileSize (row) {
             log.debug('%s [%d bytes]', row.ipfsAddress, res.CumulativeSize)
           })
           .catch((err) => {
-            log.error('Failed to load IPFS Item [%s]', row.ipfsAddress)
+            log.error('Failed to stat IPFS Item [%s]', row.ipfsAddress)
             console.log(err)
             db.run('UPDATE pinTracker SET bytes = $bytes WHERE ipfsAddress = $ipfsAddress', {
               $ipfsAddress: row.ipfsAddress,
@@ -264,7 +272,7 @@ function updateFileSize (row) {
       }
     })
     .catch(function (err) {
-      log.error('Failed to load IPFS Item [%s]', row.ipfsAddress)
+      log.error('Failed to load file size [%s]', row.ipfsAddress)
       console.log(err)
       db.run('UPDATE pinTracker SET bytes = $bytes WHERE ipfsAddress = $ipfsAddress', {
         $ipfsAddress: row.ipfsAddress,
@@ -283,7 +291,14 @@ function pinMedia () {
       i++
       if (diskUse + results[i].bytes < diskUsageLimit) {
         diskUse += results[i].bytes
-        return pinArtifact(results[i])
+        return pt.timeout(pinArtifact(results[i]), getConfig('timeout.pin', 600) * 1000)
+          .then(function (pr) {
+            return pr
+          }).catch(function (err) {
+            if (err instanceof pt.TimeoutError) {
+              log.error('Timeout pinning: ' + results[i].ipfsAddress);
+            }
+          });
       }
     } else
       return null
@@ -341,6 +356,7 @@ Promise.resolve()
   .then(getMyIpfsId)
   .then(id => refreshPinCounts(id))
   .then(pinMedia)
+  .then(() => process.exit())
   .catch(err => {
     console.log(err)
     console.error(err.stack)

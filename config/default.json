@@ -24,5 +24,10 @@
   },
   "libraryD": {
     "url": "https://api.alexandria.io/alexandria/v2/media/get/all"
+  },
+  "timeout": {
+    "fileSize": 60,
+    "pinCount": 60,
+    "pin": 600
   }
 }
